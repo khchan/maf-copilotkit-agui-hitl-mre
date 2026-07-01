@@ -3,6 +3,7 @@ from agent_framework import (
     Content,
     Executor,
     Message,
+    Workflow,
     WorkflowAgent,
     WorkflowBuilder,
     WorkflowContext,
@@ -71,8 +72,12 @@ class DeterministicHumanInputExecutor(Executor):
         )
 
 
+def create_workflow() -> Workflow:
+    return WorkflowBuilder(start_executor=DeterministicHumanInputExecutor()).build()
+
+
 def create_workflow_agent() -> WorkflowAgent:
-    workflow = WorkflowBuilder(start_executor=DeterministicHumanInputExecutor()).build()
+    workflow = create_workflow()
     return WorkflowAgent(workflow=workflow, name="Deterministic MAF HITL Workflow")
 
 

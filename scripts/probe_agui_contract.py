@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -9,7 +8,7 @@ from typing import Any
 
 import httpx
 from agent_framework import Content, Message
-from hitl_mre.app import create_workflow_agent
+from hitl_mre.app import create_workflow
 
 
 DEFAULT_URL = "http://127.0.0.1:8098/agui"
@@ -115,42 +114,31 @@ def _sibling_endpoint(url: str, path: str) -> str:
 
 
 async def _verify_direct_workflow_control() -> str:
-    agent = create_workflow_agent()
-    updates = []
-    async for update in agent.run("direct MAF workflow control", stream=True):
-        updates.append(update)
-
-    function_call = None
-    approval = None
-    for update in updates:
-        for content in update.contents:
-            if content.type == "function_call":
-                function_call = content
-            elif content.type == "function_approval_request":
-                approval = content
-
-    if function_call is None or approval is None:
-        raise AssertionError("Direct WorkflowAgent did not produce request_info approval content")
-
-    approval_response = Content.from_function_approval_response(
-        approved=True,
-        id=approval.id,
-        function_call=Content.from_function_call(
-            call_id=function_call.call_id,
-            name=function_call.name,
-            arguments={
-                "request_id": approval.id,
-                "data": "approved via direct MAF WorkflowAgent control",
-            },
-        ),
+    workflow = create_workflow()
+    request_id: str | None = None
+    input_message = Message(
+        role="user",
+        contents=[Content.from_text(text="direct MAF workflow control")],
     )
-    result = await agent.run(Message(role="user", contents=[approval_response]))
-    return "\n".join(
-        str(content.text)
-        for message in result.messages
-        for content in message.contents
-        if content.type == "text"
-    )
+    async for event in workflow.run([input_message], stream=True):
+        if event.type == "request_info":
+            request_id = event.request_id
+
+    if request_id is None:
+        raise AssertionError("Direct MAF Workflow did not emit request_info")
+
+    outputs: list[str] = []
+    async for event in workflow.run(
+        responses={request_id: "approved via direct MAF workflow control"},
+        stream=True,
+    ):
+        if event.type == "output":
+            for message in event.data.messages:
+                for content in message.contents:
+                    if content.type == "text":
+                        outputs.append(str(content.text))
+
+    return "\n".join(outputs)
 
 
 def run_probe(url: str) -> int:
@@ -172,6 +160,8 @@ def run_probe(url: str) -> int:
         request_call_id, request_call = _find_request_info_call(snapshot_messages)
         return thread_id, result, snapshot_messages, request_call_id, request_call
 
+    import asyncio
+
     direct_control_text = asyncio.run(_verify_direct_workflow_control())
 
     mismatch_thread_id, first, mismatch_snapshot, mismatch_call_id, mismatch_call = start_paused_run(
@@ -181,20 +171,20 @@ def run_probe(url: str) -> int:
 
     assertions: list[tuple[str, bool]] = [
         (
-            "Control: direct MAF WorkflowAgent request_info resumes without AG-UI",
+            "Control: direct MAF Workflow request_info resumes without AG-UI",
             RESUMED_PREFIX in direct_control_text,
         ),
         (
-            "MAF AG-UI emits CUSTOM function_approval_request",
-            "function_approval_request" in first.custom_names,
+            "MAF AG-UI emits a request_info tool call",
+            "request_info" in first.raw_text,
         ),
         (
             "MAF AG-UI does not emit CopilotKit useInterrupt CUSTOM on_interrupt",
             "on_interrupt" not in first.custom_names,
         ),
         (
-            "MAF AG-UI emits synthetic confirm_changes tool call",
-            "confirm_changes" in first.raw_text,
+            "MAF AG-UI emits no CopilotKit interrupt custom event",
+            len(first.custom_names) == 0,
         ),
         (
             "First run stops without final resumed workflow text",
@@ -261,16 +251,13 @@ def run_probe(url: str) -> int:
     maf_agui_resume = _post_run(control_url, maf_agui_resume_body)
     assertions.append(
         (
-            "Additional: MAF-specific AG-UI function_approvals response also does not resume this workflow",
+            "Additional: MAF-specific AG-UI function_approvals response finishes without resumed output",
             not _has_resumed_text(maf_agui_resume)
-            and (
-                "STREAM_CLOSED" in maf_agui_resume.event_types
-                or "RUN_ERROR" in maf_agui_resume.event_types
-            ),
+            and "RUN_FINISHED" in maf_agui_resume.event_types,
         )
     )
 
-    print("\nDirect MAF WorkflowAgent control text:", direct_control_text)
+    print("\nDirect MAF Workflow control text:", direct_control_text)
     print("\nFirst run custom events:", first.custom_names)
     print("First run event types:", first.event_types)
     print("request_info toolCallId:", mismatch_call_id)
