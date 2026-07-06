@@ -4,13 +4,12 @@ from agent_framework import (
     Executor,
     Message,
     Workflow,
-    WorkflowAgent,
     WorkflowBuilder,
     WorkflowContext,
     handler,
     response_handler,
 )
-from agent_framework.ag_ui import AgentFrameworkAgent, add_agent_framework_fastapi_endpoint
+from agent_framework.ag_ui import add_agent_framework_fastapi_endpoint
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -35,8 +34,8 @@ class DeterministicHumanInputExecutor(Executor):
     """Workflow executor that always pauses for external human input.
 
     This avoids model credentials and nondeterminism. Any user message causes a
-    MAF workflow request_info event, which WorkflowAgent converts to a
-    request_info function call plus function_approval_request content.
+    MAF workflow request_info event, which the AG-UI workflow bridge converts to a
+    request_info tool call.
     """
 
     def __init__(self) -> None:
@@ -76,11 +75,6 @@ def create_workflow() -> Workflow:
     return WorkflowBuilder(start_executor=DeterministicHumanInputExecutor()).build()
 
 
-def create_workflow_agent() -> WorkflowAgent:
-    workflow = create_workflow()
-    return WorkflowAgent(workflow=workflow, name="Deterministic MAF HITL Workflow")
-
-
 def create_app() -> FastAPI:
     app = FastAPI(title="MAF CopilotKit AG-UI HITL MRE")
 
@@ -92,31 +86,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    def register_fresh_agent(path: str) -> None:
-        add_agent_framework_fastapi_endpoint(
-            app=app,
-            agent=AgentFrameworkAgent(agent=create_workflow_agent()),
-            path=path,
-        )
-
-    register_fresh_agent("/agui")
-    register_fresh_agent("/agui-control")
-    register_fresh_agent("/agui-mismatch")
+    add_agent_framework_fastapi_endpoint(
+        app=app,
+        agent=create_workflow(),
+        path="/agui",
+    )
 
     @app.get("/health")
     async def health() -> JSONResponse:
         return JSONResponse({"ok": True, "agentId": AGENT_ID})
-
-    @app.get("/expected")
-    async def expected() -> JSONResponse:
-        return JSONResponse(
-            {
-                "actualMafAguiInterruptEvent": "CUSTOM function_approval_request",
-                "copilotKitUseInterruptExpectedEvent": "CUSTOM on_interrupt",
-                "copilotKitUseInterruptResumeLocation": "forwardedProps.command.resume",
-                "mafAguiResumeLocation": "messages[] role=tool content={\"accepted\": true, ...}",
-            }
-        )
 
     return app
 

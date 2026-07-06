@@ -8,17 +8,15 @@ dependencies = [
     "agent-framework-ag-ui==1.0.0rc7",
     "agent-framework-core==1.10.0",
     "fastapi==0.138.0",
-    "httpx==0.28.1",
     "uvicorn==0.49.0",
 ]
 
 [project.scripts]
 hitl-mre-server = "hitl_mre.app:main"
-hitl-mre-probe = "scripts.probe_agui_contract:main"
 
 [build-system]
 requires = ["hatchling==1.30.1"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hitl_mre", "scripts"]
+packages = ["src/hitl_mre"]

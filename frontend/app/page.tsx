@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  CopilotChat,
   CopilotKit,
+  CopilotSidebar,
   useHumanInTheLoop,
   useInterrupt,
 } from "@copilotkit/react-core/v2";
@@ -17,10 +17,10 @@ function HookDiagnostics() {
     agentId: AGENT_ID,
     renderInChat: false,
     render: ({ event, resolve }) => (
-      <section className="diagnostic success" data-testid="interrupt-rendered">
+      <section className="diagnostic diagnostic-success" data-testid="interrupt-rendered">
         <h2>useInterrupt rendered</h2>
         <pre>{JSON.stringify(event.value, null, 2)}</pre>
-        <button onClick={() => resolve("approved from useInterrupt")}>
+        <button type="button" onClick={() => resolve("approved from useInterrupt")}>
           Resume
         </button>
       </section>
@@ -35,10 +35,11 @@ function HookDiagnostics() {
     render: (props) => {
       if (props.status === "executing") {
         return (
-          <section className="diagnostic success" data-testid="human-review-rendered">
+          <section className="diagnostic diagnostic-success" data-testid="human-review-rendered">
             <h2>useHumanInTheLoop human_review rendered</h2>
             <pre>{JSON.stringify(props.args, null, 2)}</pre>
             <button
+              type="button"
               onClick={() => {
                 setHumanToolExecutions((count) => count + 1);
                 void props.respond("approved from human_review");
@@ -60,51 +61,56 @@ function HookDiagnostics() {
   });
 
   return (
-    <aside className="panel">
-      <h1>Hook diagnostics</h1>
-      <p>
-        Send any chat message. The MAF workflow deterministically calls
-        <code> ctx.request_info(...)</code>.
-      </p>
+    <main className="diagnostics-panel">
+      <header className="diagnostics-header">
+        <h1>Hook diagnostics</h1>
+        <p>
+          Send any chat message in the sidebar. The MAF workflow deterministically calls{" "}
+          <code>ctx.request_info(...)</code>.
+        </p>
+      </header>
+
       <div className="diagnostic" data-testid="interrupt-missing">
         <h2>useInterrupt</h2>
         {interruptElement ?? (
           <p>
-            Waiting for <code>CUSTOM on_interrupt</code>. MAF AG-UI emits
-            <code> CUSTOM function_approval_request</code> instead.
+            Waiting for <code>CUSTOM on_interrupt</code>. MAF AG-UI emits{" "}
+            <code>CUSTOM function_approval_request</code> instead.
           </p>
         )}
       </div>
+
       <div className="diagnostic" data-testid="human-review-missing">
         <h2>useHumanInTheLoop</h2>
         <p>
           <code>human_review</code> executions: {humanToolExecutions}
         </p>
         <p>
-          This normal app-level frontend tool is not called by the MAF workflow.
-          MAF emits internal <code>request_info</code> and
-          <code> confirm_changes</code> tool names.
+          This normal app-level frontend tool is not called by the MAF workflow. MAF emits
+          internal <code>request_info</code> and <code>confirm_changes</code> tool names.
         </p>
       </div>
-    </aside>
+    </main>
   );
 }
 
 export default function Page() {
   return (
     <CopilotKit runtimeUrl="/api/copilotkit" agent={AGENT_ID}>
-      <main className="shell">
+      <div className="app-shell">
         <HookDiagnostics />
-        <section className="chat">
-          <CopilotChat
-            agentId={AGENT_ID}
-            labels={{
-              chatInputPlaceholder:
-                "Type anything to trigger the deterministic MAF workflow pause",
-            }}
-          />
-        </section>
-      </main>
+        <CopilotSidebar
+          agentId={AGENT_ID}
+          defaultOpen
+          width={480}
+          labels={{
+            modalHeaderTitle: "MAF HITL Workflow",
+            chatInputPlaceholder:
+              "Type anything to trigger the deterministic MAF workflow pause",
+          }}
+          welcomeScreen={true}
+        />
+      </div>
     </CopilotKit>
   );
 }
