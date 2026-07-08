@@ -1,5 +1,6 @@
 from agent_framework import (
     AgentResponse,
+    AgentExecutorRequest,
     Content,
     Executor,
     Message,
@@ -44,6 +45,7 @@ class DeterministicHumanInputExecutor(Executor):
     @handler
     async def ask_for_human_input(self, messages: list[Message], ctx: WorkflowContext) -> None:
         user_text = _extract_latest_user_text(messages)
+        print(f"Requesting human input for: {user_text}")
         await ctx.request_info(
             f"Approve or edit this deterministic workflow input: {user_text}",
             str,
@@ -57,6 +59,14 @@ class DeterministicHumanInputExecutor(Executor):
         ctx: WorkflowContext,
     ) -> None:
         del original_request
+        print(f"Human input received: {response}")
+        # The following is needed if the human sends a response directly in the chat, 
+        # otherwise you will get the error:
+        # Cannot send 'RUN_FINISHED' while text messages are still active:
+        await ctx.send_message(
+                AgentExecutorRequest(messages=[Message("user", [response])], should_respond=True),
+                target_id=self.id,
+            )
         await ctx.yield_output(
             AgentResponse(
                 messages=[
@@ -102,7 +112,7 @@ def create_app() -> FastAPI:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("hitl_mre.app:create_app", factory=True, host="127.0.0.1", port=8098)
+    uvicorn.run("hitl_mre.app:create_app", factory=True, host="127.0.0.1", port=8094, log_level="info")
 
 
 if __name__ == "__main__":
