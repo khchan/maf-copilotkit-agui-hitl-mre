@@ -70,7 +70,7 @@ This starts the backend and launches the frontend dev server.
 
 ```bash
 cd maf-copilotkit-agui-hitl-mre
-uv run uvicorn hitl_mre.app:create_app --factory --host 127.0.0.1 --port 8098
+uv run uvicorn hitl_mre.app:create_app --factory --host 127.0.0.1 --port 8094
 ```
 
 The backend exposes a single AG-UI workflow endpoint at `/agui`.
